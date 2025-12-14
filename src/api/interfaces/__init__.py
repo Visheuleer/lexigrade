@@ -1,3 +1,4 @@
 from api.interfaces.llm_generator_interface import LLMGeneratorInterface, LLMRegeneratorInterface
 from api.interfaces.llm_reviewer_interface import LLMReviewerInterface
 from api.interfaces.nlp_tests_interface import NLPTests
+from api.interfaces.cefr_classifier_interface import CEFRClassifier
