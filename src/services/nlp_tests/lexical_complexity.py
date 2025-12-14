@@ -201,7 +201,5 @@ class LexicalComplexityTests:
         order = ["A1", "A2", "B1", "B2", "C1", "C2"]
         return order.index(l1) - order.index(l2)
 
-# for level in ["A1", "A2", "B1", "B2", "C1", "C2"]:
-#     lr = LexicalComplexityTests("english", level)
-#     print(f'{level} ----> {lr.check_oov("Her perseverance was indispensable to the accomplishment of the mission.")}')
+
 
