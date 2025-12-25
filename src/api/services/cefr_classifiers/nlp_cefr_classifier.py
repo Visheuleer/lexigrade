@@ -93,7 +93,7 @@ class NLPBasedCEFRClassifier:
         clauses = self.syntactic_complexity.check_clause_count(text)
         avg_len = self.syntactic_complexity.check_average_word_length(text)
 
-        metrics["clause_count"] = clauses["details"]["clause_count"]
+        metrics["clause_count"] = clauses["details"]["mean_clauses_per_sentence"]
         metrics["avg_word_length"] = avg_len["details"]["avg_word_length"]
 
         return metrics

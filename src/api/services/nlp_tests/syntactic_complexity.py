@@ -24,11 +24,18 @@ class SyntacticComplexityTests:
             "relcl"
         }
 
-        clause_count = 1
+        sentence_details = []
 
-        for token in doc:
-            if token.dep_ in clause_deps:
-                clause_count += 1
+        for sent in doc.sents:
+            clauses = 1
+            for token in sent:
+                if token.dep_ in clause_deps:
+                    clauses += 1
+
+            sentence_details.append({
+                "text": sent.text.strip(),
+                "clauses": clauses
+            })
 
         thresholds = {
             "A1": 1,
@@ -40,21 +47,33 @@ class SyntacticComplexityTests:
         }
 
         limit = thresholds.get(self.target_level, 10)
-        status = "pass" if clause_count <= limit else "fail"
+
+        max_clauses = max(s["clauses"] for s in sentence_details) if sentence_details else 0
+        mean_clauses = sum(s["clauses"] for s in sentence_details) / len(sentence_details) if sentence_details else 0.0
+
+        status = "pass" if max_clauses <= limit else "fail"
+
+        worst_sentences = sorted(
+            sentence_details,
+            key=lambda x: -x["clauses"]
+        )[:2]
 
         return {
             "test_name": "Clause Count",
             "status": status,
             "details": {
-                "clause_count": clause_count,
-                "threshold": limit
+                "max_clauses_per_sentence": max_clauses,
+                "mean_clauses_per_sentence": mean_clauses,
+                "threshold": limit,
+                "sentences": worst_sentences
             }
         }
 
     def check_average_word_length(self, text: str):
         doc = self.nlp(text)
+
+        words = []
         total_chars = 0
-        total_words = 0
 
         for token in doc:
             clean = token.text.strip(".,!?;:()[]{}'\"")
@@ -64,8 +83,10 @@ class SyntacticComplexityTests:
             if token.ent_type_ in ["PERSON", "GPE", "ORG"]:
                 continue
 
+            words.append(clean)
             total_chars += len(clean)
-            total_words += 1
+
+        total_words = len(words)
 
         if total_words == 0:
             return {
@@ -74,7 +95,8 @@ class SyntacticComplexityTests:
                 "details": {
                     "avg_word_length": 0.0,
                     "threshold": 0.0,
-                    "total_words": 0
+                    "total_words": 0,
+                    "long_words": []
                 }
             }
 
@@ -92,12 +114,19 @@ class SyntacticComplexityTests:
         limit = thresholds.get(self.target_level, 10.0)
         status = "pass" if avg_length <= limit else "fail"
 
+        long_words = sorted(
+            [w for w in words if len(w) > limit],
+            key=len,
+            reverse=True
+        )[:5]
+
         return {
             "test_name": "Average Word Length",
             "status": status,
             "details": {
                 "avg_word_length": avg_length,
                 "threshold": limit,
-                "total_words": total_words
+                "total_words": total_words,
+                "long_words": long_words
             }
         }

@@ -42,8 +42,9 @@ class LexicalRarityTest:
             "rarity": rarity
         }
 
-    def calculate(self, text: str, debug: bool = False):
+    def calculate(self, text: str, top_k: int = 5):
         doc = self.nlp(text)
+
         rarity_values = []
         per_word = []
 
@@ -55,38 +56,42 @@ class LexicalRarityTest:
 
             lemma = token.lemma_.lower()
             info = self._word_rarity(lemma)
+
             rarity_values.append(info["rarity"])
             per_word.append({
-                "token": token.text,
-                **info
+                "word": token.text,
+                "lemma": lemma,
+                "rarity": info["rarity"],
+                "freq": info["freq"]
             })
 
         if not rarity_values:
             return {
                 "test_name": "Lexical Rarity Score",
                 "status": "pass",
-                "details": {"rarity_score": 0.0, "words_evaluated": 0}
+                "details": {
+                    "rarity_score": 0.0,
+                    "threshold": self.level_thresholds.get(self.target_level, float("inf")),
+                    "words_evaluated": 0,
+                    "top_rare_words": []
+                }
             }
 
         rarity_score = sum(rarity_values) / len(rarity_values)
         threshold = self.level_thresholds.get(self.target_level, float("inf"))
         status = "pass" if rarity_score <= threshold else "fail"
 
-        result = {
+        # 🔹 palavras que mais contribuem para a raridade
+        per_word_sorted = sorted(per_word, key=lambda x: -x["rarity"])
+        top_rare_words = per_word_sorted[:top_k]
+
+        return {
             "test_name": "Lexical Rarity Score",
             "status": status,
             "details": {
                 "rarity_score": rarity_score,
                 "threshold": threshold,
                 "words_evaluated": len(rarity_values),
+                "top_rare_words": top_rare_words
             }
         }
-
-        if debug:
-            result["details"]["per_word"] = sorted(per_word, key=lambda x: -x["rarity"])
-
-        return result
-
-# test = LexicalRarityTest("english", "A1")
-# out = test.calculate("Her perseverance was indispensable to the accomplishment of the mission.", debug=False)
-# print(json.dumps(out, indent=2))

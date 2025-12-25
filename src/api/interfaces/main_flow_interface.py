@@ -1,10 +1,7 @@
 from pydantic import BaseModel
 
 
-class LLMReviewerInterface(BaseModel):
+class MainFlowInterface(BaseModel):
     language: str
     original_text: str
-    simplified_text: str
-
-
-
+    cefr_level_target: str

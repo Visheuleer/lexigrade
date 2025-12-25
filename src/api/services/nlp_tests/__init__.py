@@ -1,4 +1,1 @@
-from api.services.nlp_tests.lexical_complexity import LexicalComplexityTests
-from api.services.nlp_tests.lexical_rarity import LexicalRarityTest
-from api.services.nlp_tests.syntactic_complexity import SyntacticComplexityTests
-from api.services.nlp_tests.constraints_evaluator import evaluate_hard_constraints, evaluate_soft_constraints
+from api.services.nlp_tests.nlp_tests_service import NLPTestsService

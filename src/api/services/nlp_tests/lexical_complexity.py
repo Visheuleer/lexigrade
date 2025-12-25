@@ -9,6 +9,7 @@ class LexicalComplexityTests:
         self.language = language
         self.target_level = target_level
         self.lexicon = self._get_lexicon()
+        self.frequency = self._get_frequency()
         self.nlp = spacy.load(self._get_language_model())
 
     def _get_language_model(self):
@@ -22,9 +23,61 @@ class LexicalComplexityTests:
         with open(os.path.join(settings.datasets_base_path, self.language, "cefr_lexicon.json"), "r", encoding="utf-8") as f:
             return json.load(f)
 
+
+
+    def _get_frequency(self):
+        path = os.path.join(
+            settings.datasets_base_path, self.language, "subtlex_word_frequencies.json"
+        )
+
+        if not os.path.exists(path):
+            return {}
+
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _compare_levels(self, l1, l2):
+        order = ["A1", "A2", "B1", "B2", "C1", "C2"]
+        return order.index(l1) - order.index(l2)
+
+    def _lexical_cost(self, lemma, word_level):
+        dist = self._compare_levels(word_level, self.target_level)
+        zipf = self.frequency.get(lemma, {}).get("zipf", 0.0)
+
+        if zipf >= 5.5:
+            freq_weight = 0.25
+        elif zipf >= 5.0:
+            freq_weight = 0.4
+        elif zipf >= 4.5:
+            freq_weight = 0.6
+        elif zipf >= 4.0:
+            freq_weight = 0.8
+        else:
+            freq_weight = 1.0
+
+        abstract = lemma.endswith((
+            "ity", "ness", "ance", "ence",
+            "ment", "ship", "hood", "acy"
+        ))
+
+        abstract_weight = 1.4 if abstract else 0.8
+
+        return dist * freq_weight * abstract_weight
+
     def check_cefr_validity(self, text: str):
         doc = self.nlp(text)
-        invalid = []
+
+        COST_BUDGET = {
+            "A1": 0.0,
+            "A2": 3.0,
+            "B1": 6.0,
+            "B2": 10.0,
+            "C1": 20.0,
+            "C2": 999.0
+        }
+
+        total_cost = 0.0
+        flagged = []
 
         for token in doc:
             if not token.is_alpha:
@@ -38,17 +91,29 @@ class LexicalComplexityTests:
                 word_level = self.lexicon[lemma]
 
                 if self._compare_levels(word_level, self.target_level) > 0:
-                    invalid.append({
-                        "word": token.text,
-                        "lemma": lemma,
-                        "level": word_level,
-                        "allowed": self.target_level
-                    })
+                    cost = self._lexical_cost(lemma, word_level)
+                    if cost >= 1.2:
+                        total_cost += cost
+                        flagged.append({
+                            "word": token.text,
+                            "lemma": lemma,
+                            "level": word_level,
+                            "cost": round(cost, 2)
+                        })
+        status = (
+            "pass"
+            if total_cost <= COST_BUDGET[self.target_level]
+            else "fail"
+        )
 
         return {
-            "test_name": "CEFR Lexical Validity Check",
-            "status": "fail" if invalid else "pass",
-            "details": {"invalid_words": invalid}
+            "test_name": "CEFR Lexical Validity (Gradient)",
+            "status": status,
+            "details": {
+                "total_cost": round(total_cost, 2),
+                "budget": COST_BUDGET[self.target_level],
+                "flagged_words": flagged,
+            },
         }
 
     def check_oov(self, text: str):
@@ -106,11 +171,11 @@ class LexicalComplexityTests:
         ratio = difficult_count / total_count
 
         thresholds = {
-            "A1": 0.03,
-            "A2": 0.10,
-            "B1": 0.20,
-            "B2": 0.30,
-            "C1": 0.40,
+            "A1": 0.18,
+            "A2": 0.15,
+            "B1": 0.25,
+            "B2": 0.35,
+            "C1": 0.45,
             "C2": 1.00
         }
 
@@ -131,34 +196,42 @@ class LexicalComplexityTests:
     def check_morphological_complexity(self, text: str):
         doc = self.nlp(text)
 
-        complex_suffixes = [
-            "tion", "sion", "ment", "ness", "ity", "ance", "ence",
-            "ship", "hood", "acy", "ology",
-            "able", "ible", "ous", "ive", "ical", "ant", "ent", "ary"
-        ]
-
-        difficult_words = 0
+        complex_words = []
         total_words = 0
 
         for token in doc:
-            clean = token.text.strip(".,!?;:()[]{}'\"").lower()
-
-            if not clean.isalpha():
+            if not token.is_alpha:
                 continue
             if token.ent_type_ in ["PERSON", "GPE", "ORG"]:
                 continue
 
+            lemma = token.lemma_.lower()
+            text_form = token.text.lower()
+
             total_words += 1
 
-            for suf in complex_suffixes:
-                if clean.endswith(suf):
-                    difficult_words += 1
-                    break
+            is_derived_noun = (
+                    token.pos_ == "NOUN"
+                    and token.dep_ in ["nsubj", "dobj", "pobj", "obj", "obl"]
+                    and lemma != text_form
+            )
 
-            if clean.endswith("ly") and token.pos_ == "ADV":
-                lemma = token.lemma_.lower()
-                if lemma.endswith(("ous", "able", "ive", "ical", "ant", "ent")):
-                    difficult_words += 1
+            is_derived_adv = (
+                    token.pos_ == "ADV"
+                    and lemma != text_form
+            )
+
+            zipf = self.frequency.get(lemma, {}).get("zipf", 0.0)
+            low_frequency = zipf < 4.0
+
+            if (is_derived_noun or is_derived_adv) and low_frequency:
+                complex_words.append({
+                    "word": token.text,
+                    "lemma": lemma,
+                    "pos": token.pos_,
+                    "zipf": zipf,
+                    "type": "derived_noun" if is_derived_noun else "derived_adverb"
+                })
 
         if total_words == 0:
             return {
@@ -167,24 +240,26 @@ class LexicalComplexityTests:
                 "details": {
                     "ratio": 0.0,
                     "threshold": 0.0,
-                    "complex_words": 0,
+                    "complex_words": [],
                     "total_words": 0
                 }
             }
 
-        ratio = difficult_words / total_words
+        ratio = len(complex_words) / total_words
 
         thresholds = {
-            "A1": 0.03,
-            "A2": 0.08,
-            "B1": 0.15,
-            "B2": 0.25,
-            "C1": 0.35,
+            "A1": 0.05,
+            "A2": 0.10,
+            "B1": 0.18,
+            "B2": 0.30,
+            "C1": 0.45,
             "C2": 1.00
         }
 
         limit = thresholds.get(self.target_level, 1.0)
         status = "pass" if ratio <= limit else "fail"
+
+        top_complex_words = complex_words[:5]
 
         return {
             "test_name": "Morphological Complexity",
@@ -192,14 +267,11 @@ class LexicalComplexityTests:
             "details": {
                 "ratio": ratio,
                 "threshold": limit,
-                "complex_words": difficult_words,
+                "complex_words": top_complex_words,
                 "total_words": total_words
             }
         }
 
-    def _compare_levels(self, l1, l2):
-        order = ["A1", "A2", "B1", "B2", "C1", "C2"]
-        return order.index(l1) - order.index(l2)
 
 
 
