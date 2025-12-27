@@ -1,3 +1,4 @@
+import json
 from api.services import CEFRClassifierService, LLMGeneratorService, LLMReviewerService, NLPTestsService
 from api.enums import StrategySimplificationEnum
 from api.services import utils
@@ -44,7 +45,7 @@ class MainFlowService:
         )
         final_hard = nlp_tests_service.run_hard_constraints_tests(simplified_text)
         final_soft = nlp_tests_service.run_soft_constraints_tests(simplified_text)
-        semantic_alert = None
+        semantic_review = None
         if final_hard["accepted"] and final_soft["accepted"]:
             llm_reviewer_service = LLMReviewerService(
                 language=self.language,
@@ -52,8 +53,19 @@ class MainFlowService:
                 simplified_text=simplified_text
             )
             review_text = llm_reviewer_service.review()
-            if review_text[review_text.index('FINAL_DECISION'):review_text.index('BRIEF_EXPLANATION')] == 'FINAL_DECISION: FAIL':
-                semantic_alert = review_text[review_text.index('BRIEF_EXPLANATION'):]
+            try:
+                semantic_review = json.loads(review_text)
+            except json.JSONDecodeError:
+                semantic_review = {
+                    "final_decision": "FAIL",
+                    "brief_explanation": "Invalid JSON from semantic reviewer",
+                    "raw_output": review_text
+                }
+
+        if semantic_review is not None and semantic_review['final_decision'] == 'FAIL':
+            semantic_alert = semantic_review['brief_explanation']
+        else:
+            semantic_alert = None
 
         return {
             "accepted": final_hard["accepted"] and final_soft["accepted"],
@@ -62,6 +74,7 @@ class MainFlowService:
             "target_cefr": self.target_cefr,
             "final_hard_tests": final_hard,
             "final_soft_tests": final_soft,
+            "soft_relaxed": final_soft.get("accepted") and bool(final_soft.get("failed_tests")),
             "semantic_alert": semantic_alert,
             "text": simplified_text,
         }

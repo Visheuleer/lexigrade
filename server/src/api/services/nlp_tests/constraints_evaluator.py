@@ -9,12 +9,19 @@ def evaluate_hard_constraints(results: dict) -> dict:
         if result.get("status") != "pass"
     }
 
-    passed = total - len(failed_tests)
+    passed = {
+        test_name: {
+            "status": result.get("status"),
+            "details": result.get("details", {})
+        }
+        for test_name, result in results.items()
+        if result.get("status") == "pass"
+    }
     accepted = len(failed_tests) == 0
 
     return {
         "accepted": accepted,
-        "passed_tests": passed,
+        "passed_tests": list(passed.keys()),
         "failed_tests": failed_tests,
         "total_tests": total
     }
