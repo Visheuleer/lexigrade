@@ -10,8 +10,8 @@ class SupervisedCEFREstimationService:
     def __init__(self, language: str):
         self.device = torch.device("cpu") #torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model_path = os.path.join(settings.cefr_classifier_model_base_path, language)
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-        self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, local_files_only=True)
+        self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path, local_files_only=True)
 
         self.model.to(self.device)
         self.model.eval()

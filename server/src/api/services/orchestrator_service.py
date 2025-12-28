@@ -7,7 +7,7 @@ from api.services import utils
 ORDER = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 
 
-class MainFlowService:
+class OrchestratorService:
 
     def __init__(
             self,
@@ -56,11 +56,7 @@ class MainFlowService:
             try:
                 semantic_review = json.loads(review_text)
             except json.JSONDecodeError:
-                semantic_review = {
-                    "final_decision": "FAIL",
-                    "brief_explanation": "Invalid JSON from semantic reviewer",
-                    "raw_output": review_text
-                }
+                semantic_review = None
 
         if semantic_review is not None and semantic_review['final_decision'] == 'FAIL':
             semantic_alert = semantic_review['brief_explanation']
